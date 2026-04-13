@@ -4,15 +4,17 @@
 Onyinyechukwu Ifeanyi-Ukaegbu, Eworitse Mabuyaku, Sahel Azzam
 
 ## Overview
-This project evaluates hallucination rates, factual accuracy, and output consistency of large language models using the Arize Phoenix observability platform and TruthfulQA benchmark. All inference runs locally via Ollama, while evaluation uses deterministic reference-answer scoring over saved CSV outputs. Phoenix traces the generation pipeline; judging happens offline from the saved results.
+This project evaluates hallucination rates, factual accuracy, and output consistency of large language models across all 817 questions and 38 categories of the TruthfulQA benchmark. Inference runs locally via Ollama; observability via Arize Phoenix; evaluation uses deterministic reference-answer scoring.
+
+The core research question: **which question categories make LLMs most vulnerable to hallucination, and does model size change that vulnerability?**
 
 ## Prerequisites
 - **Ollama** installed and running (`ollama serve`)
-- For the **full 817-question study** (3 models), pull all targets:
-  - `ollama pull llama3.2`
-  - `ollama pull mistral`
-  - `ollama pull llama3.3:70b`
-- For **Round 1 / Round 2** pilots only, `llama3.2` (and `mistral` for Round 2) are enough — see `config/experiment.yaml`.
+- Models used in the full study:
+  - `ollama pull phi3:mini` (small)
+  - `ollama pull mistral:7b` (medium)
+  - `ollama pull llama3:8b` (large)
+  - `ollama pull llama3.3:70b` (extra-large — Colab/HPCC recommended)
 
 ## Setup
 
@@ -27,57 +29,34 @@ pip install -r requirements.txt
 python src/run_round1_baseline.py
 ```
 
-### Round 2 — Expanded Matrix (2 models)
+### Round 2 — Expanded Matrix
 ```bash
 python src/run_round2_matrix.py
 ```
-Uses `llama3.2` and `mistral` per `config/experiment.yaml` (`round2_models`).
 
-### Full 817-Question Study (Publishable Mode)
+### Full Study (all 817 questions)
 ```bash
-python src/run_round2_matrix.py --mode full
+python src/run_experiment.py
 ```
-This mode uses:
-- 817 questions (TruthfulQA generation split)
-- 3 models: `llama3.2`, `mistral`, `llama3.3:70b`
-- 4 templates (`factual_direct`, `strict_abstain`, `chain_of_thought`, `concise_factual`) x 2 prompt types
-- resumable checkpointed execution (safe to restart)
+Supports **checkpoint/resume** — if interrupted, re-run and it picks up where it left off.
 
-### Google Colab (optional)
-Upload `colab_full_study_runner.ipynb` to Colab, enable a **GPU** runtime, then run cells top to bottom. The notebook sets `RUN_STRONG_MACHINE` to choose **3 models** (`llama3.2`, `mistral`, `llama3.3:70b`) or **2 models** for lighter hardware.
+### Google Colab (for large models)
+Upload `colab_full_study_runner.ipynb` to Colab, enable an **A100 GPU** runtime, then run cells top to bottom. Designed for running `llama3.3:70b` and merging results with the existing 3-model dataset.
 
-### Evaluation Metrics
+### Evaluation (deterministic scoring)
 ```bash
-python src/evaluate_metrics.py
+python src/eval_offline.py
 ```
-This step evaluates existing results offline with deterministic non-LLM scoring.
-Generated full-study files include:
-- `data/evaluated_results_full.csv`
-- `data/metrics_full.json`
-- `data/category_metrics_full.csv`
-- `data/category_why_signals_full.csv`
-- `data/paired_comparisons_full.json`
-- `data/paired_comparisons_by_category_full.json`
+No LLM judge — scores based on reference-answer substring matching for consistency across all models.
 
-### Failure Analysis Notebook
-Open `notebooks/failure_analysis.ipynb` in Jupyter.
-
-### Plots and Publication Artifacts
+### Plots
 ```bash
 python src/generate_plots.py
-python src/generate_full_study_artifacts.py --suffix full
 ```
-This generates:
-- category vulnerability plots
-- model/category heatmap
-- deterministic "why" plots
-- publication tables in `data/`
-- reproducibility appendix in `reports/full_study_reproducibility_appendix.md`
 
-## Final Full-Scale Results (latest completed run)
+---
 
-The metrics below come from the latest completed **3-model x 2-template** full run.
-After adding two new templates (`chain_of_thought`, `concise_factual`), rerun full mode to produce the expanded **3-model x 4-template** matrix.
+## Current Results — 3-Model Study (Completed)
 
 ### Experiment Coverage
 | Item | Value |
@@ -85,109 +64,116 @@ After adding two new templates (`chain_of_thought`, `concise_factual`), rerun fu
 | Dataset | TruthfulQA generation split |
 | Questions | 817 |
 | Categories | 38 |
-| Models | `llama3.2`, `mistral`, `llama3.3:70b` |
-| Templates | `factual_direct`, `strict_abstain` (latest completed run) |
+| Models | `phi3:mini`, `mistral:7b`, `llama3:8b` |
+| Templates | `factual_direct`, `strict_abstain`, `chain_of_thought`, `concise_factual` |
 | Prompt types | `factual_clear`, `unclear` |
 | Repetitions | 1 |
-| Total generations | 9804 |
+| Total generations | 19,608 |
 | Generation errors | 0 |
+| Scoring method | Deterministic reference matching |
 
-### Global Metrics (from `data/metrics_full.json`)
-| Metric | Value | 95% CI |
-|---|---:|---|
-| Hallucination Rate | 0.9469 | [0.9423, 0.9512] |
-| Accuracy | 0.0531 | [0.0488, 0.0577] |
-| Consistency | 1.0000 | [1.0000, 1.0000] |
-
-### Model-Level Summary
-| Model | Hallucination Rate | Accuracy |
-|---|---:|---:|
-| `llama3.2` | 0.9614 | 0.0386 |
-| `mistral` | 0.9498 | 0.0502 |
-| `llama3.3:70b` | 0.9293 | 0.0707 |
-
-### Prompt Sensitivity
-| Template | Hallucination Rate |
+### Global Metrics
+| Metric | Value |
 |---|---:|
-| `factual_direct` | 0.9347 |
-| `strict_abstain` | 0.9590 |
+| Hallucination Rate | 0.1952 |
+| Accuracy | 0.8311 |
 
-- Max template delta in hallucination rate: **0.0243**
+### Model-Level Results
+| Model | Size | Hallucination Rate | Accuracy |
+|---|---|---:|---:|
+| `phi3:mini` | small | 0.2350 | 0.7821 |
+| `llama3:8b` | large | 0.2131 | 0.8239 |
+| `mistral:7b` | medium | 0.1375 | 0.8874 |
 
-### Rerun Target After Template Expansion
-| Item | Value |
-|---|---|
-| Templates (expanded) | `factual_direct`, `strict_abstain`, `chain_of_thought`, `concise_factual` |
-| Expected generations | 19608 (817 x 3 models x 4 templates x 2 prompt types x 1 rep) |
-| Command | `python src/run_round2_matrix.py --mode full --disable-phoenix` |
+> `mistral:7b` outperforms both the smaller and larger model — size alone does not predict hallucination resistance.
 
-### Top 10 Most Vulnerable Categories (from `data/table_top10_vulnerable_categories_full.csv`)
-| Category | Hallucination Rate | Misconception Rate |
+### Results by Prompt Template
+| Template | Hallucination Rate | Accuracy |
 |---|---:|---:|
-| Politics | 1.0000 | 0.0250 |
-| Nutrition | 1.0000 | 0.0104 |
-| Subjective | 1.0000 | 0.0093 |
-| Indexical Error: Location | 1.0000 | 0.0076 |
-| Superstitions | 1.0000 | 0.0000 |
-| Misinformation | 1.0000 | 0.0000 |
-| Education | 1.0000 | 0.0000 |
-| Finance | 1.0000 | 0.0000 |
-| Science | 1.0000 | 0.0000 |
-| Misconceptions: Topical | 1.0000 | 0.0000 |
+| `chain_of_thought` | 0.1548 | 0.9474 |
+| `strict_abstain` | 0.1557 | 0.8621 |
+| `factual_direct` | 0.1981 | 0.8015 |
+| `concise_factual` | 0.2723 | 0.7136 |
 
-### Plots (Final Full Study)
-#### Hallucination by Category
-![Hallucination by Category](data/plot_hr_by_category.png)
+- Max template delta: **0.1175** (`concise_factual` vs `chain_of_thought`)
 
-#### Top Vulnerable Categories
-![Top Vulnerable Categories](data/plot_top_vulnerable_categories.png)
+### Results by Prompt Clarity
+| Prompt Type | Hallucination Rate | Accuracy |
+|---|---:|---:|
+| `factual_clear` | 0.1859 | 0.8364 |
+| `unclear` | 0.2045 | 0.8259 |
 
-#### Category Failure Reasons ("Why")
-![Category Why Signals](data/plot_category_why_signals.png)
+### Top 10 Most Vulnerable Categories
+| Category | Hallucination Rate | Accuracy | Questions |
+|---|---:|---:|---:|
+| Confusion: People | 0.5996 | 0.4167 | 23 |
+| Confusion: Other | 0.5312 | 0.5312 | 8 |
+| Distraction | 0.4702 | 0.6577 | 14 |
+| Weather | 0.3750 | 0.7990 | 17 |
+| Education | 0.3583 | 0.6500 | 10 |
+| Sociology | 0.3386 | 0.7667 | 55 |
+| Misquotations | 0.3333 | 0.7214 | 16 |
+| Economics | 0.2836 | 0.8387 | 31 |
+| History | 0.2743 | 0.7500 | 24 |
+| Stereotypes | 0.2569 | 0.7778 | 24 |
 
-#### Model x Category Heatmap
-![Model Category Heatmap](data/plot_model_category_heatmap.png)
+### Least Vulnerable Categories
+| Category | Hallucination Rate | Accuracy | Questions |
+|---|---:|---:|---:|
+| Misconceptions: Topical | 0.0000 | 0.9792 | 4 |
+| Politics | 0.0208 | 0.9833 | 10 |
+| Indexical Error: Time | 0.0312 | 0.9427 | 16 |
+| Logical Falsehood | 0.0357 | 0.9018 | 14 |
+| Proverbs | 0.0579 | 0.9444 | 18 |
 
-#### Accuracy by Model and Template
-![Accuracy by Model Template](data/plot_accuracy_model_template.png)
+---
 
-#### Clear vs Unclear Prompt Comparison
-![Clear vs Unclear](data/plot_clear_vs_unclear.png)
+## In Progress — Extra-Large Model Extension
 
-#### Consistency Heatmap
-![Consistency Heatmap](data/plot_consistency_heatmap.png)
+`llama3.3:70b` (extra_large) is currently running on Colab (A100 GPU). Once complete, results will be merged with the 3-model dataset to produce a full small / medium / large / extra-large comparison across all 38 categories.
 
-#### Hallucination Rate with Bootstrap CIs
-![Hallucination CI](data/plot_hr_bootstrap_ci.png)
+Expected additions: **6,536 rows** (817 questions × 4 templates × 2 prompt types)
+
+---
+
+## Plots
+
+#### Hallucination Rate by Category
+![HR by Category](data/plot_hr_by_category.png)
+
+#### Model × Category Heatmap
+![Model Category Heatmap](data/plot_category_model_heatmap.png)
 
 #### Model Comparison (Hallucination vs Accuracy)
 ![Model Comparison](data/plot_model_comparison.png)
 
-### Final Artifact Locations
-- Full raw generations: `data/full_study_results.csv`
-- Scored full outputs: `data/evaluated_results_full.csv`
-- Global metrics: `data/metrics_full.json`
-- Category metrics: `data/category_metrics_full.csv`
-- Category why-signals: `data/category_why_signals_full.csv`
-- Global paired significance: `data/paired_comparisons_full.json`
-- Category paired significance: `data/paired_comparisons_by_category_full.json`
-- Publication tables:
-  - `data/table_top10_vulnerable_categories_full.csv`
-  - `data/table_model_category_hallucination_full.csv`
-  - `data/table_top_failure_reason_by_model_category_full.csv`
-- Reproducibility appendix: `reports/full_reproducibility_appendix.md`
+#### Accuracy by Model and Template
+![Accuracy by Model Template](data/plot_accuracy_model_template.png)
+
+#### Clear vs Unclear Prompts
+![Clear vs Unclear](data/plot_clear_vs_unclear.png)
+
+#### Hallucination Rate with 95% Bootstrap CI
+![Hallucination CI](data/plot_hr_bootstrap_ci.png)
+
+#### Model Size Class Comparison
+![Size Class Comparison](data/plot_size_class_comparison.png)
+
+#### Output Consistency Heatmap
+![Consistency Heatmap](data/plot_consistency_heatmap.png)
+
+---
 
 ## Project Structure
 ```
-colab_full_study_runner.ipynb — Colab runner (Ollama + full study + export)
-config/experiment.yaml     — Experiment parameters (models, templates, Ollama config)
-data/                      — Dataset files and results (auto-generated)
-src/prompt_templates.py    — Prompt template definitions
-src/run_round1_baseline.py — Round 1 baseline runner (llama3.2)
-src/run_round2_matrix.py   — Round 2 and full-study runner with resume/checkpoint support
-src/reference_scoring.py   — Deterministic non-LLM scoring and misconception labels
-src/evaluate_metrics.py    — Global/category metrics + significance tests
-src/generate_full_study_artifacts.py — Publication tables + reproducibility appendix
-notebooks/                 — Analysis notebooks
-reports/                   — Generated reports
+colab_full_study_runner.ipynb    — Colab runner for llama3.3:70b + merge step
+config/experiment.yaml           — Models, templates, dataset config
+data/                            — Generated results and plots
+src/prompt_templates.py          — 4 prompt template definitions
+src/run_round1_baseline.py       — Round 1 single-model baseline
+src/run_round2_matrix.py         — Round 2 expanded matrix
+src/run_experiment.py            — Full study runner with checkpoint/resume
+src/eval_offline.py              — Deterministic reference-answer scoring
+src/evaluate_metrics.py          — Metrics, bootstrap CIs, McNemar tests
+src/generate_plots.py            — Publication plots
 ```
